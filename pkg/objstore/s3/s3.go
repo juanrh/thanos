@@ -32,6 +32,11 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 )
 
+const (
+	// Storage class header.
+	amzStorageClass = "X-Amz-Storage-Class"
+)
+
 type ctxKey int
 
 type BucketLookupType int
@@ -215,6 +220,7 @@ type Bucket struct {
 	client          *minio.Client
 	defaultSSE      encrypt.ServerSide
 	putUserMetadata map[string]string
+	storageClass    string
 	partSize        uint64
 	listObjectsV1   bool
 }
@@ -365,12 +371,23 @@ func NewBucketWithConfig(logger log.Logger, config Config, component string) (*B
 		return nil, errors.Errorf("Initialize s3 client list objects version: Unsupported version %q was provided. Supported values are v1, v2", config.ListObjectsVersion)
 	}
 
+	var storageClass string
+	for _, k := range []string { amzStorageClass, strings.ToLower(amzStorageClass) } {
+		v, ok := config.PutUserMetadata[k]
+		if ok {
+			delete(config.PutUserMetadata, k)
+			storageClass = v
+			break
+		}
+	}
+
 	bkt := &Bucket{
 		logger:          logger,
 		name:            config.Bucket,
 		client:          client,
 		defaultSSE:      sse,
 		putUserMetadata: config.PutUserMetadata,
+		storageClass:    storageClass,
 		partSize:        config.PartSize,
 		listObjectsV1:   config.ListObjectsVersion == "v1",
 	}
@@ -541,6 +558,7 @@ func (b *Bucket) Upload(ctx context.Context, name string, r io.Reader) error {
 			PartSize:             partSize,
 			ServerSideEncryption: sse,
 			UserMetadata:         b.putUserMetadata,
+			StorageClass:         b.storageClass,
 		},
 	); err != nil {
 		return errors.Wrap(err, "upload s3 object")
