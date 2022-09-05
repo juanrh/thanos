@@ -50,6 +50,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/server/http/middleware"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
+	relabeller "github.com/thanos-io/thanos/pkg/receive/relabel"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
 	"github.com/thanos-io/thanos/pkg/store/storepb/prompb"
 	"github.com/thanos-io/thanos/pkg/tracing"
@@ -103,7 +104,7 @@ type Options struct {
 	TLSConfig                    *tls.Config
 	DialOpts                     []grpc.DialOption
 	ForwardTimeout               time.Duration
-	RelabelConfigs               []*relabel.Config
+	Relabeller                   *relabeller.Relabeller
 	TSDBStats                    TSDBStats
 	SeriesLimitSupported         bool
 	MaxPerTenantLimit            uint64
@@ -1027,12 +1028,13 @@ func (h *Handler) RemoteWrite(ctx context.Context, r *storepb.WriteRequest) (*st
 
 // relabel relabels the time series labels in the remote write request.
 func (h *Handler) relabel(wreq *prompb.WriteRequest) {
-	if len(h.options.RelabelConfigs) == 0 {
+	relabelConfigs := h.options.Relabeller.RelabelConfig()
+	if len(relabelConfigs) == 0 {
 		return
 	}
 	timeSeries := make([]prompb.TimeSeries, 0, len(wreq.Timeseries))
 	for _, ts := range wreq.Timeseries {
-		lbls := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), h.options.RelabelConfigs...)
+		lbls := relabel.Process(labelpb.ZLabelsToPromLabels(ts.Labels), relabelConfigs...)
 		if lbls == nil {
 			continue
 		}

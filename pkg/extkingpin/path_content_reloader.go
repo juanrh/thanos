@@ -15,14 +15,14 @@ import (
 	"github.com/pkg/errors"
 )
 
-type fileContent interface {
+type FileContent interface {
 	Content() ([]byte, error)
 	Path() string
 }
 
 // PathContentReloader starts a file watcher that monitors the file indicated by fileContent.Path() and runs
 // reloadFunc whenever a change is detected.
-func PathContentReloader(ctx context.Context, fileContent fileContent, logger log.Logger, reloadFunc func()) error {
+func PathContentReloader(ctx context.Context, fileContent FileContent, logger log.Logger, reloadFunc func()) error {
 	path := fileContent.Path()
 	watcher, err := fsnotify.NewWatcher()
 	if path == "" {
@@ -66,7 +66,7 @@ type staticPathContent struct {
 	path    string
 }
 
-var _ fileContent = (*staticPathContent)(nil)
+var _ FileContent = (*staticPathContent)(nil)
 
 // Content returns the cached content.
 func (t *staticPathContent) Content() ([]byte, error) {
@@ -94,4 +94,14 @@ func (t *staticPathContent) Rewrite(newContent []byte) error {
 	t.content = newContent
 	// Write the file to ensure possible file watcher reloaders get triggered.
 	return os.WriteFile(t.path, newContent, 0666)
+}
+
+type ConstantContentFileContent []byte
+
+func (c ConstantContentFileContent) Content() ([]byte, error) {
+	return c, nil
+}
+
+func (c ConstantContentFileContent) Path() string {
+	return ""
 }

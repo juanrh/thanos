@@ -43,6 +43,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/receive"
+	relabeller "github.com/thanos-io/thanos/pkg/receive/relabel"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
@@ -185,13 +186,9 @@ func runReceive(
 		return errors.Wrapf(err, "migrate legacy storage in %v to default tenant %v", conf.dataDir, conf.defaultTenantID)
 	}
 
-	relabelContentYaml, err := conf.relabelConfigPath.Content()
+	relabeller, err := relabeller.NewRelabeller(conf.relabelConfigPath, logger)
 	if err != nil {
 		return errors.Wrap(err, "get content of relabel configuration")
-	}
-	var relabelConfig []*relabel.Config
-	if err := yaml.Unmarshal(relabelContentYaml, &relabelConfig); err != nil {
-		return errors.Wrap(err, "parse relabel configuration")
 	}
 
 	// Impose active series limit only if Receiver is in Router or RouterIngestor mode, and config is provided.
@@ -219,7 +216,7 @@ func runReceive(
 		DefaultTenantID:              conf.defaultTenantID,
 		ReplicaHeader:                conf.replicaHeader,
 		ReplicationFactor:            conf.replicationFactor,
-		RelabelConfigs:               relabelConfig,
+		Relabeller:                   relabeller,
 		ReceiverMode:                 receiveMode,
 		Tracer:                       tracer,
 		TLSConfig:                    rwTLSConfig,
@@ -236,6 +233,15 @@ func runReceive(
 		WriteRequestSizeLimit:        conf.writeRequestSizeLimit,
 		WriteRequestConcurrencyLimit: conf.writeRequestConcurrencyLimit,
 	})
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			level.Info(logger).Log("msg", "relabel config initialized with file watcher.")
+			return relabeller.Start(ctx, nil)
+		}, func(error) {
+			cancel()
+		})
+	}
 
 	grpcProbe := prober.NewGRPC()
 	httpProbe := prober.NewHTTP()

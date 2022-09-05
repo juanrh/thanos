@@ -40,6 +40,7 @@ import (
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/errutil"
+	relabeller "github.com/thanos-io/thanos/pkg/receive/relabel"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	"github.com/thanos-io/thanos/pkg/store/labelpb"
 	"github.com/thanos-io/thanos/pkg/store/storepb"
@@ -1457,7 +1458,7 @@ func Heap(dir string) (err error) {
 func TestRelabel(t *testing.T) {
 	for _, tcase := range []struct {
 		name                 string
-		relabel              []*relabel.Config
+		relabel              relabeller.RelabelConfig
 		writeRequest         prompb.WriteRequest
 		expectedWriteRequest prompb.WriteRequest
 	}{
@@ -1813,8 +1814,10 @@ func TestRelabel(t *testing.T) {
 		},
 	} {
 		t.Run(tcase.name, func(t *testing.T) {
+			relabeller, err := relabeller.NewConstantRelabeller(tcase.relabel)
+			testutil.Ok(t, err)
 			h := NewHandler(nil, &Options{
-				RelabelConfigs: tcase.relabel,
+				Relabeller: relabeller,
 			})
 
 			h.relabel(&tcase.writeRequest)
