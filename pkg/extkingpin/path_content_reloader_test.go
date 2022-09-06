@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path"
-	"sync"
 	"testing"
 
 	"github.com/go-kit/log"
@@ -24,8 +23,10 @@ func TestPathContentReloader(t *testing.T) {
 			name: "Many operations, only rewrite triggers reload",
 			args: args{
 				runSteps: func(t *testing.T, testFile string, pathContent *staticPathContent) {
-					testutil.Ok(t, os.Chmod(testFile, 0777))
-					testutil.Ok(t, os.Remove(testFile))
+					for i := 0; i < 10; i++ {
+						testutil.Ok(t, os.Chmod(testFile, 0777))
+						testutil.Ok(t, os.Chmod(testFile, 0700))
+					}
 					testutil.Ok(t, pathContent.Rewrite([]byte("test modified")))
 				},
 			},
@@ -59,20 +60,26 @@ func TestPathContentReloader(t *testing.T) {
 				t.Fatalf("error trying to save static limit config: %s", err)
 			}
 
-			wg := &sync.WaitGroup{}
-			wg.Add(tt.wantReloads)
-
-			ctx := context.Background()
-			defer ctx.Done()
-			reloadCount := 0
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			reload := make(chan struct{})
+			reloadCounts := make(chan int)
+			go func() {
+				reloadCount := 0
+				for reloadCount < tt.wantReloads {
+					<- reload
+					reloadCount += 1
+				}
+				reloadCounts <- reloadCount
+			}()
 			err = PathContentReloader(ctx, pathContent, log.NewLogfmtLogger(os.Stdout), func() {
-				reloadCount++
-				wg.Done()
+				reload <- struct{}{}
 			})
 			testutil.Ok(t, err)
 
 			tt.args.runSteps(t, testFile, pathContent)
-			wg.Wait()
+
+			reloadCount := <- reloadCounts
 			testutil.Equals(t, tt.wantReloads, reloadCount)
 		})
 	}
