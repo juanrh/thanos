@@ -31,6 +31,9 @@ func PathContentReloader(ctx context.Context, fileContent FileContent, logger lo
 	if err != nil {
 		return errors.Wrap(err, "creating file watcher")
 	}
+	if err := watcher.Add(path); err != nil {
+		return errors.Wrapf(err, "adding path %s to file watcher", path)
+	}
 	go func() {
 		for {
 			select {
@@ -54,10 +57,6 @@ func PathContentReloader(ctx context.Context, fileContent FileContent, logger lo
 			}
 		}
 	}()
-	if err := watcher.Add(path); err != nil {
-		ctx.Done()
-		return errors.Wrapf(err, "adding path %s to file watcher", path)
-	}
 	return nil
 }
 
