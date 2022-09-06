@@ -6,7 +6,6 @@ package relabel
 import (
 	"context"
 	"fmt"
-	"sync/atomic"
 
 	"github.com/go-kit/log/level"
 	"github.com/go-kit/log"
@@ -16,6 +15,7 @@ import (
 	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/thanos-io/thanos/pkg/extkingpin"
 	"gopkg.in/yaml.v2"
+	"go.uber.org/atomic"
 )
 
 const (
