@@ -24,7 +24,7 @@ const (
 	configReloadErrCounterName ="relabel_config_reload_err_total"
 )
 
-// Limiter is responsible for managing the configuration and initialization of
+// Relabeller is responsible for managing the configuration and initialization of
 // different types that apply relabel configurations to the Receive instance.
 type Relabeller struct {
 	fileContent extkingpin.FileContent
@@ -34,9 +34,10 @@ type Relabeller struct {
 	configReloadErrCounter prometheus.Counter
 }
 
+// RelabelConfig is a collection of relabel configurations.
 type RelabelConfig []*relabel.Config
 
-// NewRelabeller creates a new relabeller and loads the configuration 
+// NewRelabeller creates a new relabeller and loads the configuration to make sure loading is possible.
 func NewRelabeller(fileContent extkingpin.FileContent, logger log.Logger, reg prometheus.Registerer) (*Relabeller, error) {
 	var relabelConfigs atomic.Value
 	relabeller := &Relabeller{
@@ -105,39 +106,48 @@ func (r *Relabeller) SetRelabelConfig(configs RelabelConfig) {
 func (r *Relabeller) loadConfig() error {
 	relabelContentYaml, err := r.fileContent.Content()
 	if err != nil {
-		return errors.Wrap(err, "get content of relabel config")
+		return errors.Wrap(err, "getting content of relabel config")
 	}
 	var relabelConfig RelabelConfig
 	if err := yaml.Unmarshal(relabelContentYaml, &relabelConfig); err != nil {
-		return errors.Wrap(err, "parse relabel config")
+		return errors.Wrap(err, "parsing relabel config")
 	}
 	r.SetRelabelConfig(relabelConfig)
 	return nil
 }
 
-func (r *Relabeller) Start(ctx context.Context, errChan chan<- error) error {
+// Run starts monitoring the file content of this Relabeller, updating the configuration when a change
+// is detected. If there is an error reading the new configuration, the previous one is still used and
+// returned in subsequent calls to `RelabelConfig`.
+// If `errChan` is not nil, then the result of each update is sent through that channel, using `nil`
+// for succesful updates.
+// Returns whether or not there was an error setting up the monitoring. This call is not blocking,
+// the background reloading process can be cancelled with `ctx`.
+func (r *Relabeller) Run(ctx context.Context, errChan chan<- error) error {
 	if r.fileContent.Path() == "" {
 		// nothing to reload here
 		return nil
 	}
 
-	return extkingpin.PathContentReloader(ctx, r.fileContent, r.logger, func()  {
-		level.Info(r.logger).Log("msg", "reloading relabel config")
-		if err := r.loadConfig(); err != nil {
+	err := extkingpin.PathContentReloader(ctx, r.fileContent, r.logger, func()  {
+		level.Info(r.logger).Log("msg", "reloading relabel config.")
+		err := r.loadConfig()
+
+		if err != nil {
 			if r.configReloadErrCounter != nil {
 				r.configReloadErrCounter.Inc()
 			}
-			if errChan != nil {
-				errChan <- err
-			}
-			errMsg := fmt.Sprintf("error relabel config from %s", r.fileContent.Path())
+			errMsg := fmt.Sprintf("error reloading relabel config from %s, will keep using the previous config.", r.fileContent.Path())
 			level.Error(r.logger).Log("msg", errMsg, "err", err)
 		}
 		if r.configReloadCounter != nil {
 			r.configReloadCounter.Inc()
 		}
-	})
-}
 
-// TODO comments
-// TODO logging
+		if errChan != nil {
+			errChan <- err
+		}
+	})
+
+	return errors.Wrap(err, "setting up relabel config file watcher")
+}
