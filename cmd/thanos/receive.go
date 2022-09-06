@@ -234,8 +234,13 @@ func runReceive(
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		g.Add(func() error {
-			level.Info(logger).Log("msg", "relabel config initialized with file watcher.")
-			return relabeller.Start(ctx, nil)
+			if err := relabeller.Run(ctx, nil); err != nil {
+				level.Error(logger).Log("msg", "initializing relabel config reloading.", "err", err)
+				return err
+			}
+			level.Info(logger).Log("msg", "relabel config reloading initialized.")
+			<- ctx.Done()
+			return nil
 		}, func(error) {
 			cancel()
 		})
