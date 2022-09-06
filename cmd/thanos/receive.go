@@ -25,11 +25,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
-	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -186,7 +184,7 @@ func runReceive(
 		return errors.Wrapf(err, "migrate legacy storage in %v to default tenant %v", conf.dataDir, conf.defaultTenantID)
 	}
 
-	relabeller, err := relabeller.NewRelabeller(conf.relabelConfigPath, logger)
+	relabeller, err := relabeller.NewRelabeller(conf.relabelConfigPath, logger, reg)
 	if err != nil {
 		return errors.Wrap(err, "get content of relabel configuration")
 	}
