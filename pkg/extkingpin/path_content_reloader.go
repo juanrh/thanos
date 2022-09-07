@@ -17,7 +17,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-type fileContent interface {
+type FileContent interface {
 	Content() ([]byte, error)
 	Path() string
 }
@@ -29,7 +29,7 @@ type fileContent interface {
 // after 2 times the debounce timer. By default the debouncer timer is 1 second.
 // To ensure renames and deletes are properly handled, the file watcher is put at the file's parent folder. See
 // https://github.com/fsnotify/fsnotify/issues/214 for more details.
-func PathContentReloader(ctx context.Context, fileContent fileContent, logger log.Logger, reloadFunc func(), opts ...reloaderOption) error {
+func PathContentReloader(ctx context.Context, fileContent FileContent, logger log.Logger, reloadFunc func(), opts ...reloaderOption) error {
 	filePath, err := filepath.Abs(fileContent.Path())
 	if err != nil {
 		return errors.Wrap(err, "getting absolute file path")
@@ -108,37 +108,47 @@ func WithDebounceTime(debounceTime time.Duration) func(cfg *reloaderConfig) {
 	}
 }
 
-type staticPathContent struct {
+type StaticPathContent struct {
 	content []byte
 	path    string
 }
 
-var _ fileContent = (*staticPathContent)(nil)
+var _ FileContent = (*StaticPathContent)(nil)
 
 // Content returns the cached content.
-func (t *staticPathContent) Content() ([]byte, error) {
+func (t *StaticPathContent) Content() ([]byte, error) {
 	return t.content, nil
 }
 
 // Path returns the path to the file that contains the content.
-func (t *staticPathContent) Path() string {
+func (t *StaticPathContent) Path() string {
 	return t.path
 }
 
 // NewStaticPathContent creates a new content that can be used to serve a static configuration. It copies the
 // configuration from `fromPath` into `destPath` to avoid confusion with file watchers.
-func NewStaticPathContent(fromPath string) (*staticPathContent, error) {
+func NewStaticPathContent(fromPath string) (*StaticPathContent, error) {
 	content, err := os.ReadFile(fromPath)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not load test content: %s", fromPath)
 	}
-	return &staticPathContent{content, fromPath}, nil
+	return &StaticPathContent{content, fromPath}, nil
 }
 
 // Rewrite rewrites the file backing this staticPathContent and swaps the local content cache. The file writing
 // is needed to trigger the file system monitor.
-func (t *staticPathContent) Rewrite(newContent []byte) error {
+func (t *StaticPathContent) Rewrite(newContent []byte) error {
 	t.content = newContent
 	// Write the file to ensure possible file watcher reloaders get triggered.
 	return os.WriteFile(t.path, newContent, 0666)
+}
+
+type ConstantContentFileContent []byte
+
+func (c ConstantContentFileContent) Content() ([]byte, error) {
+	return c, nil
+}
+
+func (c ConstantContentFileContent) Path() string {
+	return ""
 }
