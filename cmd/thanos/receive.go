@@ -25,11 +25,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/model/labels"
-	"github.com/prometheus/prometheus/model/relabel"
 	"github.com/prometheus/prometheus/tsdb"
 	"github.com/thanos-io/objstore"
 	"github.com/thanos-io/objstore/client"
-	"gopkg.in/yaml.v2"
 
 	"github.com/thanos-io/thanos/pkg/block/metadata"
 	"github.com/thanos-io/thanos/pkg/component"
@@ -43,6 +41,7 @@ import (
 	"github.com/thanos-io/thanos/pkg/logging"
 	"github.com/thanos-io/thanos/pkg/prober"
 	"github.com/thanos-io/thanos/pkg/receive"
+	"github.com/thanos-io/thanos/pkg/receive/relabel"
 	"github.com/thanos-io/thanos/pkg/runutil"
 	grpcserver "github.com/thanos-io/thanos/pkg/server/grpc"
 	httpserver "github.com/thanos-io/thanos/pkg/server/http"
@@ -185,13 +184,9 @@ func runReceive(
 		return errors.Wrapf(err, "migrate legacy storage in %v to default tenant %v", conf.dataDir, conf.defaultTenantID)
 	}
 
-	relabelContentYaml, err := conf.relabelConfigPath.Content()
+	relabeller, err := relabel.NewRelabeller(conf.relabelConfigPath, logger, reg)
 	if err != nil {
 		return errors.Wrap(err, "get content of relabel configuration")
-	}
-	var relabelConfig []*relabel.Config
-	if err := yaml.Unmarshal(relabelContentYaml, &relabelConfig); err != nil {
-		return errors.Wrap(err, "parse relabel configuration")
 	}
 
 	// Impose active series limit only if Receiver is in Router or RouterIngestor mode, and config is provided.
@@ -219,7 +214,7 @@ func runReceive(
 		DefaultTenantID:              conf.defaultTenantID,
 		ReplicaHeader:                conf.replicaHeader,
 		ReplicationFactor:            conf.replicationFactor,
-		RelabelConfigs:               relabelConfig,
+		Relabeller:                   relabeller,
 		ReceiverMode:                 receiveMode,
 		Tracer:                       tracer,
 		TLSConfig:                    rwTLSConfig,
@@ -236,6 +231,20 @@ func runReceive(
 		WriteRequestSizeLimit:        conf.writeRequestSizeLimit,
 		WriteRequestConcurrencyLimit: conf.writeRequestConcurrencyLimit,
 	})
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+		g.Add(func() error {
+			if err := relabeller.Run(ctx, nil); err != nil {
+				level.Error(logger).Log("msg", "initializing relabel config reloading.", "err", err)
+				return err
+			}
+			level.Info(logger).Log("msg", "relabel config reloading initialized.")
+			<- ctx.Done()
+			return nil
+		}, func(error) {
+			cancel()
+		})
+	}
 
 	grpcProbe := prober.NewGRPC()
 	httpProbe := prober.NewHTTP()
