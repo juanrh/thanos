@@ -65,36 +65,36 @@ func PathContentReloader(ctx context.Context, fileContent FileContent, logger lo
 	return nil
 }
 
-type staticPathContent struct {
+type StaticPathContent struct {
 	content []byte
 	path    string
 }
 
-var _ FileContent = (*staticPathContent)(nil)
+var _ FileContent = (*StaticPathContent)(nil)
 
 // Content returns the cached content.
-func (t *staticPathContent) Content() ([]byte, error) {
+func (t *StaticPathContent) Content() ([]byte, error) {
 	return t.content, nil
 }
 
 // Path returns the path to the file that contains the content.
-func (t *staticPathContent) Path() string {
+func (t *StaticPathContent) Path() string {
 	return t.path
 }
 
 // NewStaticPathContent creates a new content that can be used to serve a static configuration. It copies the
 // configuration from `fromPath` into `destPath` to avoid confusion with file watchers.
-func NewStaticPathContent(fromPath string) (*staticPathContent, error) {
+func NewStaticPathContent(fromPath string) (*StaticPathContent, error) {
 	content, err := os.ReadFile(fromPath)
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not load test content: %s", fromPath)
 	}
-	return &staticPathContent{content, fromPath}, nil
+	return &StaticPathContent{content, fromPath}, nil
 }
 
 // Rewrite rewrites the file backing this staticPathContent and swaps the local content cache. The file writing
 // is needed to trigger the file system monitor.
-func (t *staticPathContent) Rewrite(newContent []byte) error {
+func (t *StaticPathContent) Rewrite(newContent []byte) error {
 	t.content = newContent
 	// Write the file to ensure possible file watcher reloaders get triggered.
 	return os.WriteFile(t.path, newContent, 0666)

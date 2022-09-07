@@ -12,7 +12,7 @@ import (
 
 func TestPathContentReloader(t *testing.T) {
 	type args struct {
-		runSteps func(t *testing.T, testFile string, pathContent *staticPathContent)
+		runSteps func(t *testing.T, testFile string, pathContent *StaticPathContent)
 	}
 	tests := []struct {
 		name        string
@@ -22,7 +22,7 @@ func TestPathContentReloader(t *testing.T) {
 		{
 			name: "Many operations, only rewrite triggers reload",
 			args: args{
-				runSteps: func(t *testing.T, testFile string, pathContent *staticPathContent) {
+				runSteps: func(t *testing.T, testFile string, pathContent *StaticPathContent) {
 					testutil.Ok(t, os.Chmod(testFile, 0777))
 					testutil.Ok(t, os.Remove(testFile))
 					testutil.Ok(t, pathContent.Rewrite([]byte("test modified")))
@@ -33,7 +33,7 @@ func TestPathContentReloader(t *testing.T) {
 		{
 			name: "Chmod doesn't trigger reload",
 			args: args{
-				runSteps: func(t *testing.T, testFile string, pathContent *staticPathContent) {
+				runSteps: func(t *testing.T, testFile string, pathContent *StaticPathContent) {
 					testutil.Ok(t, os.Chmod(testFile, 0777))
 				},
 			},
@@ -42,7 +42,7 @@ func TestPathContentReloader(t *testing.T) {
 		{
 			name: "Remove doesn't trigger reload",
 			args: args{
-				runSteps: func(t *testing.T, testFile string, pathContent *staticPathContent) {
+				runSteps: func(t *testing.T, testFile string, pathContent *StaticPathContent) {
 					testutil.Ok(t, os.Remove(testFile))
 				},
 			},
