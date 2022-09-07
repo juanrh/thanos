@@ -1,0 +1,5 @@
+- source_labels:
+   - fooLabel
+   - barLabel
+   - newLabel
+  target_label: bazLabel
