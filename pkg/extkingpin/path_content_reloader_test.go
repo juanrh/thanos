@@ -23,10 +23,8 @@ func TestPathContentReloader(t *testing.T) {
 			name: "Many operations, only rewrite triggers reload",
 			args: args{
 				runSteps: func(t *testing.T, testFile string, pathContent *staticPathContent) {
-					for i := 0; i < 10; i++ {
-						testutil.Ok(t, os.Chmod(testFile, 0777))
-						testutil.Ok(t, os.Chmod(testFile, 0700))
-					}
+					testutil.Ok(t, os.Chmod(testFile, 0777))
+					testutil.Ok(t, os.Remove(testFile))
 					testutil.Ok(t, pathContent.Rewrite([]byte("test modified")))
 				},
 			},

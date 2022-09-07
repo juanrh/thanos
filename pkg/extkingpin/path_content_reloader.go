@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/go-kit/log/level"
 
@@ -24,6 +25,7 @@ type FileContent interface {
 // reloadFunc whenever a change is detected.
 func PathContentReloader(ctx context.Context, fileContent FileContent, logger log.Logger, reloadFunc func()) error {
 	path := fileContent.Path()
+	parentPath := filepath.Dir(path)
 	watcher, err := fsnotify.NewWatcher()
 	if path == "" {
 		level.Debug(logger).Log("msg", "no path detected for config reload")
@@ -33,6 +35,9 @@ func PathContentReloader(ctx context.Context, fileContent FileContent, logger lo
 	}
 	if err := watcher.Add(path); err != nil {
 		return errors.Wrapf(err, "adding path %s to file watcher", path)
+	}
+	if err := watcher.Add(parentPath); err != nil {
+		return errors.Wrapf(err, "adding path %s to file watcher", parentPath)
 	}
 	go func() {
 		for {
@@ -45,12 +50,12 @@ func PathContentReloader(ctx context.Context, fileContent FileContent, logger lo
 				if event.Name == "" {
 					break
 				}
+				level.Debug(logger).Log("msg", fmt.Sprintf("change detected for %s", path), "eventName", event.Name, "eventOp", event.Op)
 				// Everything but a CHMOD requires rereading.
 				// If the file was removed, we can't read it, so skip.
 				if event.Op^fsnotify.Chmod == 0 || event.Op^fsnotify.Remove == 0 {
 					break
 				}
-				level.Debug(logger).Log("msg", fmt.Sprintf("change detected for %s", path), "eventName", event.Name, "eventOp", event.Op)
 				reloadFunc()
 			case err := <-watcher.Errors:
 				level.Error(logger).Log("msg", "watcher error", "error", err)
