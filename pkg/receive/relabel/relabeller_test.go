@@ -36,9 +36,12 @@ func TestRelabellerHappyPath(t *testing.T) {
 	yaml.Unmarshal(readTestdataFile(t, goodConf1), &relabelConfig)
 	testutil.Equals(t, relabelConfig, f.relabeller.RelabelConfig())
 	
-	f.relabelConfigContent.Rewrite(readTestdataFile(t, goodConf2))
-	testutil.Ok(t, <- f.errChan)
-	yaml.Unmarshal(readTestdataFile(t, goodConf2), &relabelConfig)
+	for _, testDataFilename := range []string{goodConf2, goodConf1} {
+		f.relabelConfigContent.Rewrite(readTestdataFile(t, testDataFilename))
+		testutil.Ok(t, <- f.errChan)
+		yaml.Unmarshal(readTestdataFile(t, testDataFilename), &relabelConfig)
+		testutil.Equals(t, relabelConfig, f.relabeller.RelabelConfig())
+	}
 }
 
 func TestRelabellerReloadFailureRecovery(t *testing.T) {
